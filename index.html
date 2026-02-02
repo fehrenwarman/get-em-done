@@ -449,14 +449,30 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
 
 /* Scrollable body padding for bottom bar */
 #kid-home, #kid-weekly, #kid-extra, #kid-rewards { padding-bottom: 40px; }
+@keyframes pulse { 0%,100%{opacity:0.4;transform:scale(0.95)} 50%{opacity:1;transform:scale(1.05)} }
+.conn-banner{position:fixed;top:0;left:0;right:0;padding:6px 12px;text-align:center;font-size:0.8rem;z-index:9999;font-family:'Rajdhani',sans-serif;font-weight:600;transition:transform 0.3s ease}
+.conn-banner.offline{background:var(--red);color:#fff;transform:translateY(0)}
+.conn-banner.online{background:var(--green);color:#fff;transform:translateY(0)}
+.conn-banner.hidden{transform:translateY(-100%)}
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
+<div id="conn-banner" class="conn-banner hidden"></div>
+
+<!-- Loading Screen -->
+<div id="loading-screen" class="screen active">
+  <div style="text-align:center;padding-top:120px">
+    <div style="font-size:3rem;margin-bottom:16px;animation:pulse 1.5s ease-in-out infinite">🛰️</div>
+    <h1 style="font-size:1.3rem;margin-bottom:8px;color:var(--cyan)">Connecting to Mission HQ...</h1>
+    <p style="color:var(--text-muted);font-size:0.9rem" id="loading-status">Establishing secure link</p>
+  </div>
+</div>
+
 <!-- Login Screen -->
-<div id="login-screen" class="screen active">
+<div id="login-screen" class="screen">
   <h1>Mission HQ</h1>
   <p class="subtitle">Select your agent to begin!</p>
   <div class="kid-cards" id="login-kid-cards"></div>
@@ -773,16 +789,41 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
-// Enable offline persistence so app works without network
-db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+// Configure Firestore settings before any operations
+db.settings({
+  cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED,
+  experimentalAutoDetectLongPolling: true,
+  merge: true
+});
+
+// Enable offline persistence and wait for it to complete
+let persistenceReady = db.enablePersistence({ synchronizeTabs: true }).catch(err => {
   if (err.code === 'failed-precondition') {
     console.warn('Firestore persistence unavailable: multiple tabs open');
   } else if (err.code === 'unimplemented') {
     console.warn('Firestore persistence not supported by this browser');
   }
+  // Not fatal — continue without persistence
 });
 
 const DOC_REF = db.collection('appData').doc('main');
+
+// ============ CONNECTION STATE ============
+let firestoreOnline = false;
+
+function updateConnectionBanner(online) {
+  firestoreOnline = online;
+  const banner = document.getElementById('conn-banner');
+  if (online) {
+    banner.textContent = 'Connected to Mission HQ';
+    banner.className = 'conn-banner online';
+    setTimeout(() => banner.classList.add('hidden'), 2000);
+  } else {
+    banner.textContent = 'Offline — changes saved locally';
+    banner.className = 'conn-banner offline';
+  }
+}
+
 
 // In-memory cache so getData() stays synchronous
 let appDataCache = null;
@@ -795,8 +836,11 @@ function saveData(data) {
   appDataCache = JSON.parse(JSON.stringify(data)); // deep clone to cache
   // Always keep a localStorage backup
   try { localStorage.setItem('kidsTaskRewards_backup', JSON.stringify(data)); } catch (e) {}
-  // Fire-and-forget write to Firestore
-  DOC_REF.set(data).catch(err => console.error('Firestore write error:', err));
+  // Write to Firestore — will queue offline and sync when reconnected
+  DOC_REF.set(data).catch(err => {
+    console.error('Firestore write error:', err);
+    updateConnectionBanner(false);
+  });
 }
 
 // Re-render whichever screen is currently active
@@ -812,21 +856,26 @@ function rerenderCurrentScreen() {
   else if (id === 'parent-dashboard') renderParentDashboard();
 }
 
-// Real-time listener — updates cache and re-renders on external changes
+// Real-time listener — updates cache, re-renders on external changes, and monitors connection
 let unsubFirestore = null;
 function startRealtimeSync() {
-  unsubFirestore = DOC_REF.onSnapshot(snap => {
+  unsubFirestore = DOC_REF.onSnapshot({ includeMetadataChanges: true }, snap => {
     if (!snap.exists) return;
-    const remoteData = snap.data();
-    // Only re-render if this is an external change (different from our cache)
-    const remoteJSON = JSON.stringify(remoteData);
-    const cacheJSON = JSON.stringify(appDataCache);
-    if (remoteJSON !== cacheJSON) {
-      appDataCache = JSON.parse(remoteJSON);
-      rerenderCurrentScreen();
+    // Update connection status from metadata
+    updateConnectionBanner(!snap.metadata.fromCache);
+    // Only update data on non-metadata-only changes
+    if (!snap.metadata.hasPendingWrites) {
+      const remoteData = snap.data();
+      const remoteJSON = JSON.stringify(remoteData);
+      const cacheJSON = JSON.stringify(appDataCache);
+      if (remoteJSON !== cacheJSON) {
+        appDataCache = JSON.parse(remoteJSON);
+        rerenderCurrentScreen();
+      }
     }
   }, err => {
     console.error('Firestore listener error:', err);
+    updateConnectionBanner(false);
   });
 }
 
@@ -848,19 +897,50 @@ async function migrateFromLocalStorage() {
   return true;
 }
 
+// Helper: get Firestore doc with a timeout
+function getWithTimeout(docRef, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Firestore read timed out')), timeoutMs);
+    docRef.get().then(snap => {
+      clearTimeout(timer);
+      resolve(snap);
+    }).catch(err => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+
 // Async app initialization
 async function initApp() {
+  const statusEl = document.getElementById('loading-status');
+
   try {
+    // Step 0: wait for persistence to be ready
+    statusEl.textContent = 'Initializing local cache...';
+    await persistenceReady;
+
     // Step 1: migrate localStorage if present
+    statusEl.textContent = 'Checking for local data...';
     await migrateFromLocalStorage();
 
-    // Step 2: load data from Firestore
-    const snap = await DOC_REF.get();
-    if (snap.exists) {
-      appDataCache = snap.data();
+    // Step 2: load data from Firestore with a 10s timeout
+    statusEl.textContent = 'Loading mission data...';
+    let snap;
+    try {
+      snap = await getWithTimeout(DOC_REF, 10000);
+    } catch (timeoutErr) {
+      console.warn('Firestore get timed out, trying cache...', timeoutErr);
+      // Try reading from cache only
+      snap = await DOC_REF.get({ source: 'cache' }).catch(() => null);
     }
 
-    // Step 3: start real-time listener
+    if (snap && snap.exists) {
+      appDataCache = snap.data();
+      console.log('Data loaded from Firestore' + (snap.metadata.fromCache ? ' (cache)' : ' (server)'));
+    }
+
+    // Step 3: start real-time listener and connection monitor
     startRealtimeSync();
 
     // Step 4: render appropriate screen
@@ -876,6 +956,8 @@ async function initApp() {
     if (backup) {
       appDataCache = JSON.parse(backup);
       console.log('Loaded from localStorage backup');
+      // Start monitoring even on fallback
+      startRealtimeSync();
       // Show login from backup data if it's complete
       if (appDataCache && appDataCache.setupComplete) {
         renderLogin();
