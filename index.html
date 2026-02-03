@@ -893,19 +893,24 @@ function getData() {
   return appDataCache;
 }
 
+let lastSaveTime = 0; // guard against realtime overwriting local saves
+
 function saveData(data) {
   appDataCache = JSON.parse(JSON.stringify(data)); // deep clone to cache
   // Always keep a localStorage backup
   try { localStorage.setItem('kidsTaskRewards_backup', JSON.stringify(data)); } catch (e) {}
   // Write to Supabase
   if (familyCode) {
+    lastSaveTime = Date.now();
     sb.from('families')
       .update({ data: data, family_name: data.householdName || '', base_name: 'Basecamp', parent_pin: data.parentPin || '' })
       .eq('id', familyCode)
-      .then(({ error }) => {
+      .then(({ error, count }) => {
         if (error) {
           console.error('Supabase write error:', error);
           updateConnectionBanner(false);
+        } else {
+          console.log('Saved to Supabase OK');
         }
       });
   }
@@ -935,6 +940,11 @@ function startRealtimeSync() {
     .on('postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'families', filter: 'id=eq.' + familyCode },
       (payload) => {
+        // Ignore realtime echoes within 3s of our own save to prevent race condition
+        if (Date.now() - lastSaveTime < 3000) {
+          updateConnectionBanner(true);
+          return;
+        }
         const remoteData = payload.new.data;
         const remoteJSON = JSON.stringify(remoteData);
         const cacheJSON = JSON.stringify(appDataCache);
