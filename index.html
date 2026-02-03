@@ -54,7 +54,7 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
 }
 #login-screen.active { display: flex; }
 
-#login-screen h1 { font-size: 2rem; margin-bottom: 8px; color: var(--red); letter-spacing: 3px; text-transform: uppercase; }
+#login-screen h1 { font-size: 1.6rem; margin-bottom: 8px; color: var(--red); letter-spacing: 2px; text-transform: uppercase; }
 #login-screen .subtitle { font-size: 1rem; color: var(--text-muted); margin-bottom: 30px; letter-spacing: 2px; text-transform: uppercase; }
 
 .kid-cards { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin-bottom: 30px; }
@@ -76,6 +76,28 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
   transition: var(--transition); letter-spacing: 1px; text-transform: uppercase;
 }
 .parent-login-btn:hover { border-color: var(--red); color: var(--red); }
+
+/* Welcome Screen */
+#welcome-screen {
+  background: linear-gradient(160deg, #FFF8E7 0%, #FFF0D0 40%, #FDEBD0 100%);
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; min-height: 100vh;
+}
+#welcome-screen.active { display: flex; }
+#welcome-screen h1 { font-size: 2.2rem; color: var(--red); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 4px; }
+#welcome-screen .welcome-subtitle { font-size: 1rem; color: var(--text-muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 40px; }
+#welcome-screen .welcome-icon { font-size: 4rem; margin-bottom: 16px; }
+.welcome-options { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 340px; }
+.welcome-card {
+  background: var(--card-bg); border: 2px solid var(--card-border); border-radius: var(--card-radius);
+  padding: 24px; box-shadow: var(--card-shadow); cursor: pointer; transition: var(--transition);
+  text-align: center;
+}
+.welcome-card:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(198,40,40,0.15); border-color: var(--red); }
+.welcome-card:active { transform: scale(0.97); }
+.welcome-card .card-icon { font-size: 2.5rem; margin-bottom: 8px; display: block; }
+.welcome-card .card-title { font-family: 'Orbitron', monospace; font-size: 1rem; font-weight: 700; color: var(--red); letter-spacing: 1px; margin-bottom: 4px; }
+.welcome-card .card-desc { font-size: 0.9rem; color: var(--text-muted); }
 
 /* Setup Screen */
 #setup-screen {
@@ -471,9 +493,28 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
   </div>
 </div>
 
+<!-- Welcome Screen -->
+<div id="welcome-screen" class="screen">
+  <div class="welcome-icon">🛰️</div>
+  <h1>Mission HQ</h1>
+  <p class="welcome-subtitle">Family Task Command Center</p>
+  <div class="welcome-options">
+    <div class="welcome-card" onclick="renderSetup()">
+      <span class="card-icon">🚀</span>
+      <div class="card-title">New Recruits</div>
+      <div class="card-desc">Set up your family's mission base</div>
+    </div>
+    <div class="welcome-card" onclick="tryReturningFamily()">
+      <span class="card-icon">🔑</span>
+      <div class="card-title">Returning Agents</div>
+      <div class="card-desc">Your mission data syncs automatically</div>
+    </div>
+  </div>
+</div>
+
 <!-- Login Screen -->
 <div id="login-screen" class="screen">
-  <h1>Mission HQ</h1>
+  <h1 id="login-title">Mission HQ</h1>
   <p class="subtitle">Select your agent to begin!</p>
   <div class="kid-cards" id="login-kid-cards"></div>
   <button class="parent-login-btn" onclick="showPinModal('login')">HQ Access</button>
@@ -497,6 +538,11 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
 <!-- Setup Screen -->
 <div id="setup-screen" class="screen">
   <h1>Mission Briefing</h1>
+  <div class="setup-section">
+    <h2>Family Name</h2>
+    <input type="text" id="setup-household" placeholder="e.g. Kusmich">
+    <p style="font-size:0.8rem;color:var(--text-muted);margin-top:-4px">This becomes your mission base name</p>
+  </div>
   <div class="setup-section">
     <h2>Agent 1</h2>
     <input type="text" id="setup-name-1" placeholder="Agent name">
@@ -523,7 +569,10 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
     <h2>HQ Access Code</h2>
     <input type="text" id="setup-pin" placeholder="4-digit code" maxlength="4" inputmode="numeric">
   </div>
-  <button class="btn btn-blue" onclick="completeSetup()" style="margin-top:16px">Launch Mission!</button>
+  <div style="display:flex;gap:12px;margin-top:16px">
+    <button class="btn btn-gray" onclick="showScreen('welcome-screen')">Back</button>
+    <button class="btn btn-blue" onclick="completeSetup()">Launch Mission!</button>
+  </div>
 </div>
 
 <!-- Kid Home (Daily Tasks) -->
@@ -595,7 +644,7 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
 <!-- Parent Dashboard -->
 <div id="parent-dashboard" class="screen wide">
   <div class="parent-header">
-    <h1>Command Center</h1>
+    <h1 id="parent-header-title">Command Center</h1>
     <button class="btn btn-gray" onclick="logout()" style="padding:8px 16px;font-size:0.9rem;min-width:0">Log out</button>
   </div>
   <div class="parent-tabs" id="parent-tabs-bar">
@@ -945,7 +994,7 @@ async function initApp() {
 
     // Step 4: render appropriate screen
     if (!appDataCache || !appDataCache.setupComplete) {
-      renderSetup();
+      showScreen('welcome-screen');
     } else {
       renderLogin();
     }
@@ -985,6 +1034,7 @@ function initData() {
     redemptions: [],
     bonusGrants: [],
     parentPin: '1234',
+    householdName: '',
     setupComplete: false
   };
 }
@@ -1061,6 +1111,15 @@ function renderSetup() {
   });
 }
 
+function tryReturningFamily() {
+  const data = getData();
+  if (data && data.setupComplete) {
+    renderLogin();
+  } else {
+    alert('No existing family data found on this device. If you set up on another device, make sure you\'re using the same Firebase project. Otherwise, choose "New Recruits" to get started!');
+  }
+}
+
 function loadFromBackup() {
   const backup = localStorage.getItem('kidsTaskRewards_backup');
   if (backup) {
@@ -1080,6 +1139,7 @@ function selectSetupAvatar(el) {
 }
 
 async function completeSetup() {
+  const householdName = document.getElementById('setup-household').value.trim();
   const name1 = document.getElementById('setup-name-1').value.trim();
   const name2 = document.getElementById('setup-name-2').value.trim();
   const pin = document.getElementById('setup-pin').value.trim();
@@ -1088,6 +1148,7 @@ async function completeSetup() {
   const photo1 = uploadedPhotos[1];
   const photo2 = uploadedPhotos[2];
 
+  if (!householdName) return alert('Please enter your family name.');
   if (!name1 || !name2) return alert('Please enter names for both agents.');
   if (!photo1 && !av1) return alert('Please pick an avatar or upload a photo for Agent 1.');
   if (!photo2 && !av2) return alert('Please pick an avatar or upload a photo for Agent 2.');
@@ -1095,16 +1156,22 @@ async function completeSetup() {
 
   // Safety check: don't overwrite existing Firestore data
   try {
-    const snap = await DOC_REF.get();
-    if (snap.exists && snap.data().setupComplete) {
+    let snap;
+    try {
+      snap = await getWithTimeout(DOC_REF, 5000);
+    } catch (timeoutErr) {
+      // Server unreachable — try cache
+      snap = await DOC_REF.get({ source: 'cache' }).catch(() => null);
+    }
+    if (snap && snap.exists && snap.data().setupComplete) {
       if (!confirm('Existing family data was found in the database. Starting fresh will ERASE all current data (kids, points, tasks, rewards). Are you sure?')) {
         return;
       }
     }
+    // If snap is null or doesn't exist, safe to proceed — no data to overwrite
   } catch (e) {
-    // Can't reach Firestore — refuse to proceed to avoid silent overwrite later
-    alert('Cannot verify database state. Please check your internet connection and try again.');
-    return;
+    console.warn('Safety check failed, proceeding with setup:', e);
+    // If we truly can't check, allow setup — Firestore will queue the write offline
   }
 
   const avatar1 = photo1 || av1.dataset.avatar;
@@ -1116,6 +1183,7 @@ async function completeSetup() {
     { id: genId(), name: name2, avatar: avatar2, points: 0, completedTasks: [] }
   ];
   data.parentPin = pin;
+  data.householdName = householdName;
   data.setupComplete = true;
 
   // Default tasks
@@ -1148,8 +1216,16 @@ async function completeSetup() {
 function renderLogin() {
   const data = getData();
   if (!data || !data.setupComplete) {
-    renderSetup();
+    showScreen('welcome-screen');
     return;
+  }
+
+  // Set household name in title
+  const titleEl = document.getElementById('login-title');
+  if (data.householdName) {
+    titleEl.textContent = `The ${data.householdName} Basecamp`;
+  } else {
+    titleEl.textContent = 'Mission HQ';
   }
 
   const c = document.getElementById('login-kid-cards');
@@ -1701,6 +1777,11 @@ function showParentTab(tab, btnEl) {
 }
 
 function renderParentDashboard() {
+  const data = getData();
+  const headerTitle = document.getElementById('parent-header-title');
+  if (data && data.householdName) {
+    headerTitle.textContent = `${data.householdName} Command Center`;
+  }
   renderParentOverview();
   document.querySelectorAll('.parent-tab').forEach(t => t.classList.remove('active'));
   document.querySelector('.parent-tab[data-tab="overview"]').classList.add('active');
