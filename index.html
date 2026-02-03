@@ -477,8 +477,7 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
 .conn-banner.online{background:var(--green);color:#fff;transform:translateY(0)}
 .conn-banner.hidden{transform:translateY(-100%)}
 </style>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -504,11 +503,20 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
       <div class="card-title">New Recruits</div>
       <div class="card-desc">Set up your family's mission base</div>
     </div>
-    <div class="welcome-card" onclick="tryReturningFamily()">
+    <div class="welcome-card" onclick="showFamilyCodeEntry()">
       <span class="card-icon">🔑</span>
       <div class="card-title">Returning Agents</div>
-      <div class="card-desc">Your mission data syncs automatically</div>
+      <div class="card-desc">Enter your family code to rejoin</div>
     </div>
+  </div>
+  <div id="family-code-entry" style="display:none;margin-top:24px;text-align:center;width:100%;max-width:340px">
+    <input type="text" id="family-code-input" placeholder="6-char code"
+           maxlength="6" style="text-transform:uppercase;text-align:center;font-size:1.2rem;letter-spacing:4px;width:100%;padding:12px;border:2px solid var(--card-border);border-radius:10px;font-family:'Orbitron',monospace;background:#fff;color:var(--text);outline:none">
+    <div style="display:flex;gap:12px;justify-content:center;margin-top:12px">
+      <button class="btn btn-gray" onclick="hideFamilyCodeEntry()">Cancel</button>
+      <button class="btn btn-blue" onclick="joinFamily()">Join Mission</button>
+    </div>
+    <p id="family-code-error" style="color:var(--red);font-size:0.85rem;margin-top:8px;display:none"></p>
   </div>
 </div>
 
@@ -526,7 +534,7 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
     <div style="font-size:4rem;margin-bottom:16px">📡</div>
     <h1 style="color:var(--red);font-size:1.5rem;margin-bottom:12px">Connection Lost</h1>
     <p style="color:var(--text-muted);margin-bottom:8px">Could not reach Mission HQ database.</p>
-    <p style="color:var(--text-muted);margin-bottom:24px;font-size:0.9rem">Your data is safe — check your internet connection or Firebase rules and try again.</p>
+    <p style="color:var(--text-muted);margin-bottom:24px;font-size:0.9rem">Your data is safe — check your internet connection and try again.</p>
     <button class="btn btn-blue" onclick="location.reload()" style="margin-bottom:12px">Retry Connection</button>
     <div id="error-backup-msg" style="display:none;margin-top:16px">
       <p style="color:var(--text-muted);margin-bottom:8px;font-size:0.9rem">A local backup was found. You can use it in read-only mode:</p>
@@ -644,7 +652,12 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
 <!-- Parent Dashboard -->
 <div id="parent-dashboard" class="screen wide">
   <div class="parent-header">
-    <h1 id="parent-header-title">Command Center</h1>
+    <div>
+      <h1 id="parent-header-title">Command Center</h1>
+      <div id="family-code-display" style="font-size:0.75rem;color:var(--text-muted);margin-top:-4px;letter-spacing:1px">
+        Family Code: <strong id="family-code-value" style="letter-spacing:2px;color:var(--gold)"></strong>
+      </div>
+    </div>
     <button class="btn btn-gray" onclick="logout()" style="padding:8px 16px;font-size:0.9rem;min-width:0">Log out</button>
   </div>
   <div class="parent-tabs" id="parent-tabs-bar">
@@ -825,54 +838,35 @@ function handlePhotoUpload(kidNum, input) {
   reader.readAsDataURL(file);
 }
 
-// ============ FIREBASE CONFIG ============
-const firebaseConfig = {
-  apiKey: "AIzaSyBiC3fsFZQm5Z2OI1OKcpSdO0r3cBkWFVo",
-  authDomain: "kids-task-rewards-b5498.firebaseapp.com",
-  projectId: "kids-task-rewards-b5498",
-  storageBucket: "kids-task-rewards-b5498.firebasestorage.app",
-  messagingSenderId: "979722871498",
-  appId: "1:979722871498:web:a4c4c1b2d23cc5cb8ea498"
-};
+// ============ SUPABASE CONFIG ============
+const SUPABASE_URL = 'https://ynejdwoznotuxgfbrkaj.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InluZWpkd296bm90dXhnZmJya2FqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAwNjQzMzUsImV4cCI6MjA4NTY0MDMzNX0.dDohcO72OY6AVH_F_SvcCSCLlehG-uv7pVHkylqJC1w';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
+let familyCode = localStorage.getItem('familyCode') || null;
 
-// Configure Firestore settings before any operations
-db.settings({
-  cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED,
-  experimentalAutoDetectLongPolling: true,
-  merge: true
-});
-
-// Enable offline persistence and wait for it to complete
-let persistenceReady = db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-  if (err.code === 'failed-precondition') {
-    console.warn('Firestore persistence unavailable: multiple tabs open');
-  } else if (err.code === 'unimplemented') {
-    console.warn('Firestore persistence not supported by this browser');
-  }
-  // Not fatal — continue without persistence
-});
-
-const DOC_REF = db.collection('appData').doc('main');
+function generateFamilyCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+  return code;
+}
 
 // ============ CONNECTION STATE ============
-let firestoreOnline = false;
+let supabaseOnline = false;
 
 function updateConnectionBanner(online) {
-  firestoreOnline = online;
+  supabaseOnline = online;
   const banner = document.getElementById('conn-banner');
   if (online) {
     banner.textContent = 'Connected to Mission HQ';
     banner.className = 'conn-banner online';
     setTimeout(() => banner.classList.add('hidden'), 2000);
   } else {
-    banner.textContent = 'Offline — changes saved locally';
+    banner.textContent = 'Reconnecting...';
     banner.className = 'conn-banner offline';
   }
 }
-
 
 // In-memory cache so getData() stays synchronous
 let appDataCache = null;
@@ -885,11 +879,18 @@ function saveData(data) {
   appDataCache = JSON.parse(JSON.stringify(data)); // deep clone to cache
   // Always keep a localStorage backup
   try { localStorage.setItem('kidsTaskRewards_backup', JSON.stringify(data)); } catch (e) {}
-  // Write to Firestore — will queue offline and sync when reconnected
-  DOC_REF.set(data).catch(err => {
-    console.error('Firestore write error:', err);
-    updateConnectionBanner(false);
-  });
+  // Write to Supabase
+  if (familyCode) {
+    sb.from('families')
+      .update({ data: data, family_name: data.householdName || '', parent_pin: data.parentPin || '' })
+      .eq('id', familyCode)
+      .then(({ error }) => {
+        if (error) {
+          console.error('Supabase write error:', error);
+          updateConnectionBanner(false);
+        }
+      });
+  }
 }
 
 // Re-render whichever screen is currently active
@@ -906,58 +907,31 @@ function rerenderCurrentScreen() {
 }
 
 // Real-time listener — updates cache, re-renders on external changes, and monitors connection
-let unsubFirestore = null;
+let realtimeChannel = null;
 function startRealtimeSync() {
-  unsubFirestore = DOC_REF.onSnapshot({ includeMetadataChanges: true }, snap => {
-    if (!snap.exists) return;
-    // Update connection status from metadata
-    updateConnectionBanner(!snap.metadata.fromCache);
-    // Only update data on non-metadata-only changes
-    if (!snap.metadata.hasPendingWrites) {
-      const remoteData = snap.data();
-      const remoteJSON = JSON.stringify(remoteData);
-      const cacheJSON = JSON.stringify(appDataCache);
-      if (remoteJSON !== cacheJSON) {
-        appDataCache = JSON.parse(remoteJSON);
-        rerenderCurrentScreen();
+  if (realtimeChannel) sb.removeChannel(realtimeChannel);
+  if (!familyCode) return;
+
+  realtimeChannel = sb
+    .channel('family-' + familyCode)
+    .on('postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'families', filter: 'id=eq.' + familyCode },
+      (payload) => {
+        const remoteData = payload.new.data;
+        const remoteJSON = JSON.stringify(remoteData);
+        const cacheJSON = JSON.stringify(appDataCache);
+        if (remoteJSON !== cacheJSON) {
+          appDataCache = JSON.parse(remoteJSON);
+          try { localStorage.setItem('kidsTaskRewards_backup', remoteJSON); } catch (e) {}
+          rerenderCurrentScreen();
+        }
+        updateConnectionBanner(true);
       }
-    }
-  }, err => {
-    console.error('Firestore listener error:', err);
-    updateConnectionBanner(false);
-  });
-}
-
-// One-time migration: localStorage → Firestore
-async function migrateFromLocalStorage() {
-  const raw = localStorage.getItem('kidsTaskRewards');
-  if (!raw) return false;
-  const localData = JSON.parse(raw);
-  // Only migrate if Firestore doc doesn't already exist
-  const snap = await DOC_REF.get();
-  if (!snap.exists) {
-    await DOC_REF.set(localData);
-    console.log('Migrated localStorage data to Firestore');
-  }
-  // Backup and remove localStorage
-  localStorage.setItem('kidsTaskRewards_backup', raw);
-  localStorage.removeItem('kidsTaskRewards');
-  console.log('localStorage data backed up and removed');
-  return true;
-}
-
-// Helper: get Firestore doc with a timeout
-function getWithTimeout(docRef, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Firestore read timed out')), timeoutMs);
-    docRef.get().then(snap => {
-      clearTimeout(timer);
-      resolve(snap);
-    }).catch(err => {
-      clearTimeout(timer);
-      reject(err);
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') updateConnectionBanner(true);
+      else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') updateConnectionBanner(false);
     });
-  });
 }
 
 // Async app initialization
@@ -965,59 +939,53 @@ async function initApp() {
   const statusEl = document.getElementById('loading-status');
 
   try {
-    // Step 0: wait for persistence to be ready
-    statusEl.textContent = 'Initializing local cache...';
-    await persistenceReady;
+    statusEl.textContent = 'Checking for mission credentials...';
+    familyCode = localStorage.getItem('familyCode');
 
-    // Step 1: migrate localStorage if present
-    statusEl.textContent = 'Checking for local data...';
-    await migrateFromLocalStorage();
+    if (familyCode) {
+      statusEl.textContent = 'Loading mission data...';
+      const { data: row, error } = await sb
+        .from('families').select('data').eq('id', familyCode).single();
 
-    // Step 2: load data from Firestore with a 10s timeout
-    statusEl.textContent = 'Loading mission data...';
-    let snap;
-    try {
-      snap = await getWithTimeout(DOC_REF, 10000);
-    } catch (timeoutErr) {
-      console.warn('Firestore get timed out, trying cache...', timeoutErr);
-      // Try reading from cache only
-      snap = await DOC_REF.get({ source: 'cache' }).catch(() => null);
-    }
+      if (error || !row) {
+        console.warn('Family not found:', error);
+        localStorage.removeItem('familyCode');
+        familyCode = null;
+        // Try localStorage backup
+        const backup = localStorage.getItem('kidsTaskRewards_backup');
+        if (backup) {
+          appDataCache = JSON.parse(backup);
+          if (appDataCache && appDataCache.setupComplete) {
+            showScreen('error-screen');
+            document.getElementById('error-backup-msg').style.display = 'block';
+            return;
+          }
+        }
+        showScreen('welcome-screen');
+        return;
+      }
 
-    if (snap && snap.exists) {
-      appDataCache = snap.data();
-      console.log('Data loaded from Firestore' + (snap.metadata.fromCache ? ' (cache)' : ' (server)'));
-    }
+      appDataCache = row.data;
+      try { localStorage.setItem('kidsTaskRewards_backup', JSON.stringify(appDataCache)); } catch (e) {}
+      startRealtimeSync();
 
-    // Step 3: start real-time listener and connection monitor
-    startRealtimeSync();
-
-    // Step 4: render appropriate screen
-    if (!appDataCache || !appDataCache.setupComplete) {
-      showScreen('welcome-screen');
+      if (appDataCache && appDataCache.setupComplete) {
+        renderLogin();
+      } else {
+        showScreen('welcome-screen');
+      }
     } else {
-      renderLogin();
+      showScreen('welcome-screen');
     }
   } catch (err) {
     console.error('Init error:', err);
-    // Fallback: try localStorage backup
     const backup = localStorage.getItem('kidsTaskRewards_backup');
     if (backup) {
       appDataCache = JSON.parse(backup);
-      console.log('Loaded from localStorage backup');
-      // Start monitoring even on fallback
-      startRealtimeSync();
-      // Show login from backup data if it's complete
-      if (appDataCache && appDataCache.setupComplete) {
-        renderLogin();
-        return;
-      }
+      if (appDataCache && appDataCache.setupComplete) { renderLogin(); return; }
     }
-    // Show connection error screen instead of setup to prevent data loss
     showScreen('error-screen');
-    if (backup) {
-      document.getElementById('error-backup-msg').style.display = 'block';
-    }
+    if (backup) document.getElementById('error-backup-msg').style.display = 'block';
   }
 }
 
@@ -1111,13 +1079,45 @@ function renderSetup() {
   });
 }
 
-function tryReturningFamily() {
-  const data = getData();
-  if (data && data.setupComplete) {
-    renderLogin();
-  } else {
-    alert('No existing family data found on this device. If you set up on another device, make sure you\'re using the same Firebase project. Otherwise, choose "New Recruits" to get started!');
+function showFamilyCodeEntry() {
+  document.getElementById('family-code-entry').style.display = 'block';
+  document.getElementById('family-code-input').value = '';
+  document.getElementById('family-code-error').style.display = 'none';
+  document.getElementById('family-code-input').focus();
+}
+
+function hideFamilyCodeEntry() {
+  document.getElementById('family-code-entry').style.display = 'none';
+}
+
+async function joinFamily() {
+  const input = document.getElementById('family-code-input');
+  const errorEl = document.getElementById('family-code-error');
+  const code = input.value.trim().toUpperCase();
+  if (code.length !== 6) {
+    errorEl.textContent = 'Code must be 6 characters.';
+    errorEl.style.display = 'block';
+    return;
   }
+  errorEl.style.display = 'none';
+
+  const { data: row, error } = await sb
+    .from('families').select('data').eq('id', code).single();
+
+  if (error || !row) {
+    errorEl.textContent = 'Family not found. Check your code and try again.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  familyCode = code;
+  localStorage.setItem('familyCode', code);
+  appDataCache = row.data;
+  try { localStorage.setItem('kidsTaskRewards_backup', JSON.stringify(appDataCache)); } catch (e) {}
+  startRealtimeSync();
+
+  if (appDataCache && appDataCache.setupComplete) renderLogin();
+  else showScreen('welcome-screen');
 }
 
 function loadFromBackup() {
@@ -1154,26 +1154,6 @@ async function completeSetup() {
   if (!photo2 && !av2) return alert('Please pick an avatar or upload a photo for Agent 2.');
   if (pin.length !== 4 || !/^\d+$/.test(pin)) return alert('Access code must be 4 digits.');
 
-  // Safety check: don't overwrite existing Firestore data
-  try {
-    let snap;
-    try {
-      snap = await getWithTimeout(DOC_REF, 5000);
-    } catch (timeoutErr) {
-      // Server unreachable — try cache
-      snap = await DOC_REF.get({ source: 'cache' }).catch(() => null);
-    }
-    if (snap && snap.exists && snap.data().setupComplete) {
-      if (!confirm('Existing family data was found in the database. Starting fresh will ERASE all current data (kids, points, tasks, rewards). Are you sure?')) {
-        return;
-      }
-    }
-    // If snap is null or doesn't exist, safe to proceed — no data to overwrite
-  } catch (e) {
-    console.warn('Safety check failed, proceeding with setup:', e);
-    // If we truly can't check, allow setup — Firestore will queue the write offline
-  }
-
   const avatar1 = photo1 || av1.dataset.avatar;
   const avatar2 = photo2 || av2.dataset.avatar;
 
@@ -1206,7 +1186,28 @@ async function completeSetup() {
     completions: []
   }));
 
-  saveData(data);
+  // Generate unique family code and insert into Supabase
+  let code, inserted = false;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    code = generateFamilyCode();
+    const { error } = await sb.from('families').insert({
+      id: code, family_name: householdName, parent_pin: pin, data: data
+    });
+    if (!error) { inserted = true; break; }
+    if (error.code === '23505') continue; // duplicate key, retry
+    console.error('Supabase insert error:', error);
+    alert('Could not connect to Mission HQ. Check your connection and try again.');
+    return;
+  }
+  if (!inserted) { alert('Could not generate a unique family code. Please try again.'); return; }
+
+  familyCode = code;
+  localStorage.setItem('familyCode', code);
+  appDataCache = JSON.parse(JSON.stringify(data));
+  try { localStorage.setItem('kidsTaskRewards_backup', JSON.stringify(data)); } catch (e) {}
+  startRealtimeSync();
+
+  alert('Your Family Code is: ' + code + '\n\nSave this code! You can use it on other devices to sync your family data.');
   renderLogin();
   showScreen('login-screen');
 }
@@ -1782,6 +1783,8 @@ function renderParentDashboard() {
   if (data && data.householdName) {
     headerTitle.textContent = `${data.householdName} Command Center`;
   }
+  const codeEl = document.getElementById('family-code-value');
+  if (codeEl && familyCode) codeEl.textContent = familyCode;
   renderParentOverview();
   document.querySelectorAll('.parent-tab').forEach(t => t.classList.remove('active'));
   document.querySelector('.parent-tab[data-tab="overview"]').classList.add('active');
