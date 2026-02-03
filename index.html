@@ -115,15 +115,6 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
 }
 .setup-section input[type="text"]:focus { border-color: var(--gold); }
 
-.base-name-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 8px; }
-.base-name-option {
-  padding: 10px 8px; border: 2px solid var(--card-border); border-radius: 10px;
-  cursor: pointer; transition: var(--transition); font-family: 'Orbitron', monospace;
-  font-size: 0.75rem; font-weight: 700; letter-spacing: 1px; color: var(--text-muted);
-  background: #f5f0e8; text-align: center;
-}
-.base-name-option:hover { border-color: var(--gold); color: var(--text); }
-.base-name-option.selected { border-color: var(--gold); background: #FFF8E7; color: var(--gold); }
 
 .avatar-grid {
   display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 12px;
@@ -558,17 +549,8 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
   <h1>Mission Briefing</h1>
   <div class="setup-section">
     <h2>Family Name</h2>
-    <input type="text" id="setup-household" placeholder="e.g. Kusmich" oninput="updateBaseNamePreview()">
-    <h2 style="margin-top:16px">Choose Your Base</h2>
-    <div class="base-name-options" id="base-name-options">
-      <div class="base-name-option selected" data-base="Basecamp" onclick="selectBaseName(this)">Basecamp</div>
-      <div class="base-name-option" data-base="Mission HQ" onclick="selectBaseName(this)">Mission HQ</div>
-      <div class="base-name-option" data-base="Command Center" onclick="selectBaseName(this)">Command Center</div>
-      <div class="base-name-option" data-base="Launch Pad" onclick="selectBaseName(this)">Launch Pad</div>
-      <div class="base-name-option" data-base="Ops Center" onclick="selectBaseName(this)">Ops Center</div>
-      <div class="base-name-option" data-base="Home Base" onclick="selectBaseName(this)">Home Base</div>
-    </div>
-    <p id="base-name-preview" style="font-size:0.85rem;color:var(--gold);margin-top:8px;font-family:'Orbitron',monospace;letter-spacing:1px">The Kusmich Basecamp</p>
+    <input type="text" id="setup-household" placeholder="e.g. Kusmich">
+    <p style="font-size:0.8rem;color:var(--text-muted);margin-top:-4px">Your base will be called "The Kusmich Basecamp"</p>
   </div>
   <div class="setup-section">
     <h2>Agent 1</h2>
@@ -901,7 +883,7 @@ function saveData(data) {
   // Write to Supabase
   if (familyCode) {
     sb.from('families')
-      .update({ data: data, family_name: data.householdName || '', base_name: data.baseName || 'Basecamp', parent_pin: data.parentPin || '' })
+      .update({ data: data, family_name: data.householdName || '', base_name: 'Basecamp', parent_pin: data.parentPin || '' })
       .eq('id', familyCode)
       .then(({ error }) => {
         if (error) {
@@ -1022,7 +1004,6 @@ function initData() {
     bonusGrants: [],
     parentPin: '1234',
     householdName: '',
-    baseName: 'Basecamp',
     setupComplete: false
   };
 }
@@ -1148,19 +1129,6 @@ function loadFromBackup() {
   }
 }
 
-function selectBaseName(el) {
-  document.querySelectorAll('.base-name-option').forEach(o => o.classList.remove('selected'));
-  el.classList.add('selected');
-  updateBaseNamePreview();
-}
-
-function updateBaseNamePreview() {
-  const name = document.getElementById('setup-household').value.trim() || 'Kusmich';
-  const baseEl = document.querySelector('.base-name-option.selected');
-  const base = baseEl ? baseEl.dataset.base : 'Basecamp';
-  document.getElementById('base-name-preview').textContent = `The ${name} ${base}`;
-}
-
 function selectSetupAvatar(el) {
   const kid = el.dataset.kid;
   const kidNum = parseInt(kid) + 1;
@@ -1173,8 +1141,6 @@ function selectSetupAvatar(el) {
 
 async function completeSetup() {
   const householdName = document.getElementById('setup-household').value.trim();
-  const baseNameEl = document.querySelector('.base-name-option.selected');
-  const baseName = baseNameEl ? baseNameEl.dataset.base : 'Basecamp';
   const name1 = document.getElementById('setup-name-1').value.trim();
   const name2 = document.getElementById('setup-name-2').value.trim();
   const pin = document.getElementById('setup-pin').value.trim();
@@ -1199,7 +1165,6 @@ async function completeSetup() {
   ];
   data.parentPin = pin;
   data.householdName = householdName;
-  data.baseName = baseName;
   data.setupComplete = true;
 
   // Default tasks
@@ -1227,7 +1192,7 @@ async function completeSetup() {
   for (let attempt = 0; attempt < 5; attempt++) {
     code = generateFamilyCode();
     const { error } = await sb.from('families').insert({
-      id: code, family_name: householdName, base_name: baseName, parent_pin: pin, data: data
+      id: code, family_name: householdName, base_name: 'Basecamp', parent_pin: pin, data: data
     });
     if (!error) { inserted = true; break; }
     if (error.code === '23505') continue; // duplicate key, retry
@@ -1260,8 +1225,7 @@ function renderLogin() {
   // Set household name in title
   const titleEl = document.getElementById('login-title');
   if (data.householdName) {
-    const base = data.baseName || 'Basecamp';
-    titleEl.textContent = `The ${data.householdName} ${base}`;
+    titleEl.textContent = `The ${data.householdName} Basecamp`;
   } else {
     titleEl.textContent = 'Mission HQ';
   }
@@ -1818,8 +1782,7 @@ function renderParentDashboard() {
   const data = getData();
   const headerTitle = document.getElementById('parent-header-title');
   if (data && data.householdName) {
-    const base = data.baseName || 'Command Center';
-    headerTitle.textContent = `${data.householdName} ${base}`;
+    headerTitle.textContent = `The ${data.householdName} Basecamp`;
   }
   const codeEl = document.getElementById('family-code-value');
   if (codeEl && familyCode) codeEl.textContent = familyCode;
