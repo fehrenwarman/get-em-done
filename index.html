@@ -1103,17 +1103,25 @@ let setupKidCount = 1;
 function renderSetup() {
   setupKidCount = 1;
   uploadedPhotos = {};
+  setupKidNames = {};
   showScreen('setup-screen');
   renderSetupKids();
 }
 
+let setupKidNames = {};
+
 function renderSetupKids() {
+  // Save current names before re-rendering
+  for (let i = 1; i <= setupKidCount + 1; i++) {
+    const el = document.getElementById('setup-name-' + i);
+    if (el) setupKidNames[i] = el.value;
+  }
   const container = document.getElementById('setup-kids-container');
   let html = '';
   for (let i = 1; i <= setupKidCount; i++) {
     html += `<div class="setup-section">
       <h2>Agent ${i}${setupKidCount > 1 ? ` <button onclick="removeSetupKid(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.8rem;vertical-align:middle">remove</button>` : ''}</h2>
-      <input type="text" id="setup-name-${i}" placeholder="Agent name" value="${document.getElementById('setup-name-' + i)?.value || ''}">
+      <input type="text" id="setup-name-${i}" placeholder="Agent name" value="${setupKidNames[i] || ''}">
       <div class="avatar-upload-wrap">
         <button class="avatar-upload-btn" onclick="document.getElementById('setup-photo-${i}').click()">Upload Photo</button>
         <img class="avatar-upload-preview" id="setup-preview-${i}" ${uploadedPhotos[i] ? 'src="' + uploadedPhotos[i] + '" class="avatar-upload-preview show"' : ''}>
@@ -1140,15 +1148,23 @@ function addSetupKid() {
 
 function removeSetupKid(n) {
   if (setupKidCount <= 1) return;
-  // Shift uploaded photos down
+  // Save current names before removal
+  for (let i = 1; i <= setupKidCount; i++) {
+    const el = document.getElementById('setup-name-' + i);
+    if (el) setupKidNames[i] = el.value;
+  }
+  // Shift photos and names down
   const newPhotos = {};
+  const newNames = {};
   let j = 1;
   for (let i = 1; i <= setupKidCount; i++) {
     if (i === n) continue;
     newPhotos[j] = uploadedPhotos[i] || null;
+    newNames[j] = setupKidNames[i] || '';
     j++;
   }
   uploadedPhotos = newPhotos;
+  setupKidNames = newNames;
   setupKidCount--;
   renderSetupKids();
 }
