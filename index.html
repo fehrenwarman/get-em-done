@@ -1266,6 +1266,14 @@ async function completeSetup() {
     { title: 'Water plants', type: 'extra', points: 10, assignedTo: 'shared', requiresApproval: false, claimedBy: null, repeatable: 'weekly', extraMode: 'rotating' },
     { title: 'Help cook dinner', type: 'extra', points: 15, assignedTo: 'both', requiresApproval: true, claimedBy: null, repeatable: 'daily', extraMode: 'team' },
   ];
+  // For single-kid families, convert team/rotating tasks to individual
+  if (data.kids.length === 1) {
+    const kidId = data.kids[0].id;
+    defaultTasks.forEach(t => {
+      if (t.assignedTo === 'both' || t.assignedTo === 'shared') t.assignedTo = kidId;
+      if (t.extraMode === 'team' || t.extraMode === 'rotating') t.extraMode = 'individual';
+    });
+  }
   data.tasks = defaultTasks.map(t => ({
     id: genId(), ...t,
     claimedBy: t.claimedBy || null,
@@ -1498,18 +1506,20 @@ function renderKidExtra() {
   }
   html += '</div>';
 
-  // Team missions (extra-team + legacy shared)
-  const allTeamTasks = [...teamExtraTasks, ...legacySharedTasks];
-  html += '<div class="section-label">Team Missions</div><div class="task-list">';
-  if (allTeamTasks.length === 0) {
-    html += '<div class="empty-state"><span class="emoji">🤝</span>No team missions available</div>';
-  } else {
-    html += allTeamTasks.map(t => {
-      if (t.type === 'shared') return renderSharedTaskItem(t, kid);
-      return renderExtraTaskItem(t, kid, weekStart);
-    }).join('');
+  // Team missions (extra-team + legacy shared) — hide for single-kid families
+  if (data.kids.length > 1) {
+    const allTeamTasks = [...teamExtraTasks, ...legacySharedTasks];
+    html += '<div class="section-label">Team Missions</div><div class="task-list">';
+    if (allTeamTasks.length === 0) {
+      html += '<div class="empty-state"><span class="emoji">🤝</span>No team missions available</div>';
+    } else {
+      html += allTeamTasks.map(t => {
+        if (t.type === 'shared') return renderSharedTaskItem(t, kid);
+        return renderExtraTaskItem(t, kid, weekStart);
+      }).join('');
+    }
+    html += '</div>';
   }
-  html += '</div>';
 
   container.innerHTML = html;
 }
@@ -2134,14 +2144,16 @@ function renderParentTasks() {
     html += '</div>';
   }
 
-  // --- Team Missions (extra-team + legacy shared) ---
-  const teamTasks = data.tasks.filter(t =>
-    (t.type === 'extra' && getExtraMode(t) === 'team') || t.type === 'shared'
-  );
-  if (teamTasks.length > 0) {
-    html += '<div class="section-label">Team Missions</div><div class="crud-list">';
-    html += teamTasks.map(renderTaskCrudItem).join('');
-    html += '</div>';
+  // --- Team Missions (extra-team + legacy shared) — hide for single-kid families ---
+  if (data.kids.length > 1) {
+    const teamTasks = data.tasks.filter(t =>
+      (t.type === 'extra' && getExtraMode(t) === 'team') || t.type === 'shared'
+    );
+    if (teamTasks.length > 0) {
+      html += '<div class="section-label">Team Missions</div><div class="crud-list">';
+      html += teamTasks.map(renderTaskCrudItem).join('');
+      html += '</div>';
+    }
   }
 
   if (data.tasks.length === 0) {
@@ -2168,8 +2180,23 @@ function openTaskModal(taskId) {
   document.getElementById('task-modal-title').textContent = taskId ? 'Edit Mission' : 'New Mission';
 
   const sel = document.getElementById('task-edit-assigned');
-  sel.innerHTML = `<option value="both">Everyone</option>
+  const isSingleKid = data.kids.length === 1;
+  sel.innerHTML = isSingleKid
+    ? `${data.kids.map(k => `<option value="${k.id}">${k.name}</option>`).join('')}`
+    : `<option value="both">Everyone</option>
     ${data.kids.map(k => `<option value="${k.id}">${k.name}</option>`).join('')}`;
+
+  // Hide rotating/team extra mode options for single-kid families
+  const extraModeSelect = document.getElementById('task-edit-extra-mode');
+  extraModeSelect.querySelectorAll('option').forEach(opt => {
+    if (opt.value === 'rotating' || opt.value === 'team') {
+      opt.style.display = isSingleKid ? 'none' : '';
+    }
+  });
+  // Hide assigned-to for single-kid families (always auto-assigned)
+  if (isSingleKid) {
+    document.getElementById('task-edit-assigned-wrap').style.display = 'none';
+  }
 
   if (taskId) {
     const t = data.tasks.find(x => x.id === taskId);
@@ -2207,11 +2234,13 @@ function toggleTimeOfDayField() {
 }
 
 function toggleExtraModeOptions() {
+  const data = getData();
   const type = document.getElementById('task-edit-type').value;
   const extraMode = document.getElementById('task-edit-extra-mode').value;
   // Hide assigned-to for rotating/team extra tasks (auto-determined)
-  // Show it for everything else (daily, weekly, shared, extra-individual)
-  const hideAssigned = type === 'extra' && (extraMode === 'rotating' || extraMode === 'team');
+  // Also always hide for single-kid families (auto-assigned)
+  const isSingleKid = data.kids.length === 1;
+  const hideAssigned = isSingleKid || (type === 'extra' && (extraMode === 'rotating' || extraMode === 'team'));
   document.getElementById('task-edit-assigned-wrap').style.display = hideAssigned ? 'none' : 'block';
 }
 
@@ -2231,7 +2260,12 @@ function saveTask() {
 
   // Auto-determine assignedTo for rotating/team extra tasks
   let finalAssignedTo = assignedTo;
-  if (type === 'extra') {
+  let finalExtraMode = extraMode;
+  if (data.kids.length === 1) {
+    // Single-kid families: force individual mode, assign to the only kid
+    finalExtraMode = 'individual';
+    finalAssignedTo = data.kids[0].id;
+  } else if (type === 'extra') {
     if (extraMode === 'rotating') finalAssignedTo = 'shared';
     else if (extraMode === 'team') finalAssignedTo = 'both';
   }
@@ -2246,7 +2280,7 @@ function saveTask() {
       t.timeOfDay = type === 'daily' ? timeOfDay : null;
       t.daysActive = type === 'daily' ? daysActive : null;
       t.repeatable = type === 'extra' ? repeatable : null;
-      t.extraMode = type === 'extra' ? extraMode : null;
+      t.extraMode = type === 'extra' ? finalExtraMode : null;
     }
   } else {
     data.tasks.push({
@@ -2254,7 +2288,7 @@ function saveTask() {
       timeOfDay: type === 'daily' ? timeOfDay : null,
       daysActive: type === 'daily' ? daysActive : null,
       repeatable: type === 'extra' ? repeatable : null,
-      extraMode: type === 'extra' ? extraMode : null,
+      extraMode: type === 'extra' ? finalExtraMode : null,
       claimedBy: null, completions: []
     });
   }
