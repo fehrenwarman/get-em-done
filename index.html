@@ -1429,7 +1429,8 @@ function renderKidHome() {
       const check = done ? (pendingApproval ? '⏳' : '✓') : '';
       const meta = pendingApproval ? 'Awaiting HQ confirmation' : (done ? 'Mission accomplished!' : '');
 
-      return `<div class="${cls}" onclick="${done ? '' : `completeTask('${t.id}')`}">
+      const action = done ? (pendingApproval ? '' : `uncompleteTask('${t.id}')`) : `completeTask('${t.id}')`;
+      return `<div class="${cls}" onclick="${action}">
         <div class="task-check">${check}</div>
         <div class="task-info">
           <div class="task-title">${t.title}</div>
@@ -1533,7 +1534,8 @@ function renderWeeklyTaskItem(t, kid, weekStart) {
   const check = done ? (pendingApproval ? '⏳' : '✓') : '';
   const meta = pendingApproval ? 'Awaiting HQ confirmation' : (done ? 'Mission accomplished!' : 'This week');
 
-  return `<div class="${cls}" onclick="${done ? '' : `completeTask('${t.id}')`}">
+  const action = done ? (pendingApproval ? '' : `uncompleteTask('${t.id}')`) : `completeTask('${t.id}')`;
+  return `<div class="${cls}" onclick="${action}">
     <div class="task-check">${check}</div>
     <div class="task-info"><div class="task-title">${t.title}</div><div class="task-meta">${meta}</div></div>
     <div class="task-points">+${t.points}⭐</div>
@@ -1555,7 +1557,8 @@ function renderExtraTaskItem(t, kid, weekStart) {
       const cls = pendingApproval ? 'task-item pending-approval' : 'task-item completed';
       const check = pendingApproval ? '⏳' : '✓';
       const meta = pendingApproval ? 'Team — awaiting HQ confirmation' : 'Team mission accomplished!';
-      return `<div class="${cls}">
+      const action = pendingApproval ? '' : `uncompleteTask('${t.id}')`;
+      return `<div class="${cls}" onclick="${action}">
         <div class="task-check">${check}</div>
         <div class="task-info"><div class="task-title">🤝 ${t.title}</div><div class="task-meta">${meta}</div></div>
         <div class="task-points">+${t.points}⭐</div>
@@ -1574,7 +1577,8 @@ function renderExtraTaskItem(t, kid, weekStart) {
       const cls = pendingApproval ? 'task-item pending-approval' : 'task-item completed';
       const check = pendingApproval ? '⏳' : '✓';
       const meta = pendingApproval ? 'Awaiting HQ confirmation' : 'Mission accomplished!';
-      return `<div class="${cls}">
+      const action = pendingApproval ? '' : `uncompleteTask('${t.id}')`;
+      return `<div class="${cls}" onclick="${action}">
         <div class="task-check">${check}</div>
         <div class="task-info"><div class="task-title">${t.title}</div><div class="task-meta">${meta}</div></div>
         <div class="task-points">+${t.points}⭐</div>
@@ -1616,7 +1620,8 @@ function renderExtraTaskItem(t, kid, weekStart) {
     const cls = pendingApproval ? 'task-item pending-approval' : 'task-item completed';
     const check = pendingApproval ? '⏳' : '✓';
     const meta = pendingApproval ? 'Awaiting HQ confirmation' : 'Mission accomplished!';
-    return `<div class="${cls}">
+    const action = pendingApproval ? '' : `uncompleteTask('${t.id}')`;
+    return `<div class="${cls}" onclick="${action}">
       <div class="task-check">${check}</div>
       <div class="task-info"><div class="task-title">${t.title}</div><div class="task-meta">${meta}</div></div>
       <div class="task-points">+${t.points}⭐</div>
@@ -1758,6 +1763,45 @@ function completeTask(taskId) {
     showCelebration(`Mission accomplished! +${task.points} 🎉`);
     triggerConfetti();
   }
+
+  const activeScreen = document.querySelector('.screen.active');
+  if (activeScreen.id === 'kid-home') renderKidHome();
+  else if (activeScreen.id === 'kid-weekly') renderKidWeekly();
+  else if (activeScreen.id === 'kid-extra') renderKidExtra();
+}
+
+function uncompleteTask(taskId) {
+  const data = getData();
+  const task = data.tasks.find(t => t.id === taskId);
+  const kid = data.kids.find(k => k.id === currentKidId);
+  if (!task || !kid) return;
+
+  let dateKey;
+  if (task.type === 'daily') {
+    dateKey = getToday();
+  } else if (task.type === 'extra') {
+    const rep = task.repeatable || 'once';
+    dateKey = rep === 'daily' ? getToday() : rep === 'weekly' ? getWeekStart() : getToday();
+  } else {
+    dateKey = getWeekStart();
+  }
+
+  // Remove from task.completions
+  const compIdx = task.completions.findIndex(c => c.kidId === kid.id && c.date === dateKey);
+  if (compIdx === -1) return;
+  task.completions.splice(compIdx, 1);
+
+  // Remove from kid.completedTasks and deduct points if it was approved
+  const ctIdx = kid.completedTasks.findIndex(c => c.taskId === task.id && c.date === dateKey);
+  if (ctIdx !== -1) {
+    const ct = kid.completedTasks[ctIdx];
+    if (ct.approved) {
+      kid.points = Math.max(0, kid.points - task.points);
+    }
+    kid.completedTasks.splice(ctIdx, 1);
+  }
+
+  saveData(data);
 
   const activeScreen = document.querySelector('.screen.active');
   if (activeScreen.id === 'kid-home') renderKidHome();
