@@ -495,9 +495,9 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
 
 <!-- Welcome Screen -->
 <div id="welcome-screen" class="screen">
-  <div class="welcome-icon">🛰️</div>
-  <h1>Mission HQ</h1>
-  <p class="welcome-subtitle">Family Task Command Center</p>
+  <div class="welcome-icon">🚀</div>
+  <h1>Go Get Em Done</h1>
+  <p class="welcome-subtitle" style="max-width:340px;line-height:1.4">Complete missions, earn points, and unlock awesome rewards! A fun way to track chores and earn rewards</p>
   <div class="welcome-options">
     <div class="welcome-card" onclick="renderSetup()">
       <span class="card-icon">🚀</span>
@@ -824,7 +824,7 @@ function renderAvatar(avatar, size) {
 }
 
 // Photo upload: resize to 128x128 and store as base64
-const uploadedPhotos = { 1: null, 2: null };
+let uploadedPhotos = {};
 
 function handlePhotoUpload(kidNum, input) {
   const file = input.files[0];
