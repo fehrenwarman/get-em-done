@@ -1932,18 +1932,9 @@ function renderParentOverview() {
         <button class="btn btn-pink" style="padding:8px 16px;font-size:0.7rem;min-width:0" onclick="openDeductModal('${kid.id}')">Remove Stars</button>
       </div>`;
 
-    // Daily tasks grid (Sun-Sat) — grouped by time of day
-    const timeGroups = [
-      { key: 'morning', label: '🌅 Morning Missions' },
-      { key: 'evening', label: '🌙 Evening Missions' },
-      { key: 'anytime', label: '⭐ Anytime Missions' }
-    ];
-
-    timeGroups.forEach(group => {
-      const groupTasks = dailyTasks.filter(t => (t.timeOfDay || 'anytime') === group.key);
-      if (groupTasks.length === 0) return;
-
-      html += `<div style="margin-top:14px;font-weight:700;font-size:0.85rem;color:var(--text-muted)">${group.label}</div>`;
+    // Daily tasks grid (Sun-Sat) — one table, grouped by time of day
+    if (dailyTasks.length > 0) {
+      html += `<div style="margin-top:14px;font-weight:700;font-size:0.85rem;color:var(--text-muted)">Daily Missions</div>`;
       html += '<table class="weekly-grid"><thead><tr><th>Task</th>';
       weekDates.forEach((d, i) => {
         const isToday = d === today;
@@ -1951,38 +1942,51 @@ function renderParentOverview() {
       });
       html += '</tr></thead><tbody>';
 
-      groupTasks.forEach(t => {
-        const days = t.daysActive || 'everyday';
-        const daysLabel = days === 'weekdays' ? ' <span class="pts-label">Mon–Fri</span>' : days === 'weekends' ? ' <span class="pts-label">Sat–Sun</span>' : '';
-        html += `<tr><td>${t.title} <span class="pts-label">${t.points}pts</span>${daysLabel}</td>`;
-        weekDates.forEach((d, i) => {
-          const isWkend = i === 0 || i === 6;
-          const taskActive = days === 'everyday' || (days === 'weekdays' && !isWkend) || (days === 'weekends' && isWkend);
+      const timeGroups = [
+        { key: 'morning', label: '🌅 Morning' },
+        { key: 'evening', label: '🌙 Evening' },
+        { key: 'anytime', label: '⭐ Anytime' }
+      ];
 
-          if (!taskActive) {
-            html += `<td><span class="check-miss" style="color:#eee">—</span></td>`;
-          } else {
-            const completion = t.completions.find(c => c.kidId === kid.id && c.date === d);
-            const ct = kid.completedTasks.find(c => c.taskId === t.id && c.date === d);
-            if (completion) {
-              if (t.requiresApproval && ct && !ct.approved) {
-                html += `<td><span class="check-pending">⏳</span></td>`;
-              } else {
-                html += `<td><span class="check-done">✓</span></td>`;
-              }
-            } else if (d < today) {
-              html += `<td><span class="check-miss">✗</span></td>`;
-            } else if (d === today) {
-              html += `<td><span class="check-miss">○</span></td>`;
+      timeGroups.forEach(group => {
+        const groupTasks = dailyTasks.filter(t => (t.timeOfDay || 'anytime') === group.key);
+        if (groupTasks.length === 0) return;
+
+        html += `<tr><td colspan="${weekDates.length + 1}" style="font-weight:700;font-size:0.8rem;color:var(--text-muted);padding:8px 4px 2px;border:none;background:transparent">${group.label}</td></tr>`;
+
+        groupTasks.forEach(t => {
+          const days = t.daysActive || 'everyday';
+          const daysLabel = days === 'weekdays' ? ' <span class="pts-label">Mon–Fri</span>' : days === 'weekends' ? ' <span class="pts-label">Sat–Sun</span>' : '';
+          html += `<tr><td>${t.title} <span class="pts-label">${t.points}pts</span>${daysLabel}</td>`;
+          weekDates.forEach((d, i) => {
+            const isWkend = i === 0 || i === 6;
+            const taskActive = days === 'everyday' || (days === 'weekdays' && !isWkend) || (days === 'weekends' && isWkend);
+
+            if (!taskActive) {
+              html += `<td><span class="check-miss" style="color:#eee">—</span></td>`;
             } else {
-              html += `<td><span class="check-miss">·</span></td>`;
+              const completion = t.completions.find(c => c.kidId === kid.id && c.date === d);
+              const ct = kid.completedTasks.find(c => c.taskId === t.id && c.date === d);
+              if (completion) {
+                if (t.requiresApproval && ct && !ct.approved) {
+                  html += `<td><span class="check-pending">⏳</span></td>`;
+                } else {
+                  html += `<td><span class="check-done">✓</span></td>`;
+                }
+              } else if (d < today) {
+                html += `<td><span class="check-miss">✗</span></td>`;
+              } else if (d === today) {
+                html += `<td><span class="check-miss">○</span></td>`;
+              } else {
+                html += `<td><span class="check-miss">·</span></td>`;
+              }
             }
-          }
+          });
+          html += '</tr>';
         });
-        html += '</tr>';
       });
       html += '</tbody></table>';
-    });
+    }
 
     // Extra tasks for this kid
     const extraTasks = data.tasks.filter(t =>
