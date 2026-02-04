@@ -1039,12 +1039,12 @@ function initData() {
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
-function getToday() { return new Date().toISOString().split('T')[0]; }
+function getToday() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 
 function getWeekStart(dateObj) {
   const d = dateObj ? new Date(dateObj) : new Date();
   d.setDate(d.getDate() - d.getDay());
-  return d.toISOString().split('T')[0];
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
 // Get array of 7 date strings (Sun-Sat) for the week containing the given date
