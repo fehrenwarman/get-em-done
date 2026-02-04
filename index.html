@@ -552,28 +552,8 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
     <input type="text" id="setup-household" placeholder="e.g. Kusmich">
     <p style="font-size:0.8rem;color:var(--text-muted);margin-top:-4px">Your base will be called "The Kusmich Basecamp"</p>
   </div>
-  <div class="setup-section">
-    <h2>Agent 1</h2>
-    <input type="text" id="setup-name-1" placeholder="Agent name">
-    <div class="avatar-upload-wrap">
-      <button class="avatar-upload-btn" onclick="document.getElementById('setup-photo-1').click()">Upload Photo</button>
-      <img class="avatar-upload-preview" id="setup-preview-1">
-      <input type="file" id="setup-photo-1" accept="image/*" style="display:none" onchange="handlePhotoUpload(1, this)">
-    </div>
-    <div class="avatar-or">— or pick an emoji —</div>
-    <div class="avatar-grid" id="setup-avatars-1"></div>
-  </div>
-  <div class="setup-section">
-    <h2>Agent 2</h2>
-    <input type="text" id="setup-name-2" placeholder="Agent name">
-    <div class="avatar-upload-wrap">
-      <button class="avatar-upload-btn" onclick="document.getElementById('setup-photo-2').click()">Upload Photo</button>
-      <img class="avatar-upload-preview" id="setup-preview-2">
-      <input type="file" id="setup-photo-2" accept="image/*" style="display:none" onchange="handlePhotoUpload(2, this)">
-    </div>
-    <div class="avatar-or">— or pick an emoji —</div>
-    <div class="avatar-grid" id="setup-avatars-2"></div>
-  </div>
+  <div id="setup-kids-container"></div>
+  <button class="btn btn-orange" onclick="addSetupKid()" style="margin-top:8px;padding:10px 20px;font-size:0.8rem">+ Add Another Agent</button>
   <div class="setup-section">
     <h2>HQ Access Code</h2>
     <input type="text" id="setup-pin" placeholder="4-digit code" maxlength="4" inputmode="numeric">
@@ -723,7 +703,7 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
       <select id="task-edit-extra-mode" onchange="toggleExtraModeOptions()">
         <option value="individual">Individual (one kid at a time)</option>
         <option value="rotating">Rotating (first-come-first-serve)</option>
-        <option value="team">Team (both kids, both get points)</option>
+        <option value="team">Team (all agents get points)</option>
       </select>
       <label>Repeatable</label>
       <select id="task-edit-repeatable">
@@ -797,6 +777,27 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
     <div class="btn-row">
       <button class="btn btn-gray" onclick="closeModal('deduct-modal')">Cancel</button>
       <button class="btn btn-pink" onclick="deductPoints()">Remove Stars</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Kid Modal -->
+<div class="modal-overlay" id="add-kid-modal">
+  <div class="modal">
+    <h2>Add New Agent</h2>
+    <label>Agent Name</label>
+    <input type="text" id="add-kid-name" placeholder="Agent name">
+    <label>Avatar</label>
+    <div class="avatar-upload-wrap">
+      <button class="avatar-upload-btn" onclick="document.getElementById('add-kid-photo').click()">Upload Photo</button>
+      <img class="avatar-upload-preview" id="add-kid-preview">
+      <input type="file" id="add-kid-photo" accept="image/*" style="display:none" onchange="handleAddKidPhoto(this)">
+    </div>
+    <div class="avatar-or">— or pick an emoji —</div>
+    <div class="avatar-grid" id="add-kid-avatars"></div>
+    <div class="btn-row">
+      <button class="btn btn-gray" onclick="closeModal('add-kid-modal')">Cancel</button>
+      <button class="btn btn-green" onclick="addNewKid()">Add Agent</button>
     </div>
   </div>
 </div>
@@ -1097,14 +1098,59 @@ function logout() {
 
 // ============ SETUP ============
 
+let setupKidCount = 1;
+
 function renderSetup() {
+  setupKidCount = 1;
+  uploadedPhotos = {};
   showScreen('setup-screen');
-  ['setup-avatars-1', 'setup-avatars-2'].forEach((containerId, idx) => {
-    const c = document.getElementById(containerId);
+  renderSetupKids();
+}
+
+function renderSetupKids() {
+  const container = document.getElementById('setup-kids-container');
+  let html = '';
+  for (let i = 1; i <= setupKidCount; i++) {
+    html += `<div class="setup-section">
+      <h2>Agent ${i}${setupKidCount > 1 ? ` <button onclick="removeSetupKid(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:0.8rem;vertical-align:middle">remove</button>` : ''}</h2>
+      <input type="text" id="setup-name-${i}" placeholder="Agent name" value="${document.getElementById('setup-name-' + i)?.value || ''}">
+      <div class="avatar-upload-wrap">
+        <button class="avatar-upload-btn" onclick="document.getElementById('setup-photo-${i}').click()">Upload Photo</button>
+        <img class="avatar-upload-preview" id="setup-preview-${i}" ${uploadedPhotos[i] ? 'src="' + uploadedPhotos[i] + '" class="avatar-upload-preview show"' : ''}>
+        <input type="file" id="setup-photo-${i}" accept="image/*" style="display:none" onchange="handlePhotoUpload(${i}, this)">
+      </div>
+      <div class="avatar-or">— or pick an emoji —</div>
+      <div class="avatar-grid" id="setup-avatars-${i}"></div>
+    </div>`;
+  }
+  container.innerHTML = html;
+  // Populate emoji grids
+  for (let i = 1; i <= setupKidCount; i++) {
+    const c = document.getElementById('setup-avatars-' + i);
     c.innerHTML = AVATARS.map(a =>
-      `<div class="avatar-option" data-kid="${idx}" data-avatar="${a}" onclick="selectSetupAvatar(this)">${a}</div>`
+      `<div class="avatar-option" data-kid="${i - 1}" data-avatar="${a}" onclick="selectSetupAvatar(this)">${a}</div>`
     ).join('');
-  });
+  }
+}
+
+function addSetupKid() {
+  setupKidCount++;
+  renderSetupKids();
+}
+
+function removeSetupKid(n) {
+  if (setupKidCount <= 1) return;
+  // Shift uploaded photos down
+  const newPhotos = {};
+  let j = 1;
+  for (let i = 1; i <= setupKidCount; i++) {
+    if (i === n) continue;
+    newPhotos[j] = uploadedPhotos[i] || null;
+    j++;
+  }
+  uploadedPhotos = newPhotos;
+  setupKidCount--;
+  renderSetupKids();
 }
 
 function showFamilyCodeEntry() {
@@ -1157,39 +1203,34 @@ function loadFromBackup() {
 }
 
 function selectSetupAvatar(el) {
-  const kid = el.dataset.kid;
-  const kidNum = parseInt(kid) + 1;
+  const kidNum = parseInt(el.dataset.kid) + 1;
   document.querySelectorAll(`#setup-avatars-${kidNum} .avatar-option`).forEach(a => a.classList.remove('selected'));
   el.classList.add('selected');
-  // Clear uploaded photo
   uploadedPhotos[kidNum] = null;
-  document.getElementById('setup-preview-' + kidNum).classList.remove('show');
+  const preview = document.getElementById('setup-preview-' + kidNum);
+  if (preview) preview.classList.remove('show');
 }
 
 async function completeSetup() {
   const householdName = document.getElementById('setup-household').value.trim();
-  const name1 = document.getElementById('setup-name-1').value.trim();
-  const name2 = document.getElementById('setup-name-2').value.trim();
   const pin = document.getElementById('setup-pin').value.trim();
-  const av1 = document.querySelector('#setup-avatars-1 .selected');
-  const av2 = document.querySelector('#setup-avatars-2 .selected');
-  const photo1 = uploadedPhotos[1];
-  const photo2 = uploadedPhotos[2];
 
   if (!householdName) return alert('Please enter your family name.');
-  if (!name1 || !name2) return alert('Please enter names for both agents.');
-  if (!photo1 && !av1) return alert('Please pick an avatar or upload a photo for Agent 1.');
-  if (!photo2 && !av2) return alert('Please pick an avatar or upload a photo for Agent 2.');
   if (pin.length !== 4 || !/^\d+$/.test(pin)) return alert('Access code must be 4 digits.');
 
-  const avatar1 = photo1 || av1.dataset.avatar;
-  const avatar2 = photo2 || av2.dataset.avatar;
+  // Collect kids dynamically
+  const kids = [];
+  for (let i = 1; i <= setupKidCount; i++) {
+    const name = document.getElementById('setup-name-' + i).value.trim();
+    const av = document.querySelector('#setup-avatars-' + i + ' .selected');
+    const photo = uploadedPhotos[i];
+    if (!name) return alert(`Please enter a name for Agent ${i}.`);
+    if (!photo && !av) return alert(`Please pick an avatar or upload a photo for Agent ${i}.`);
+    kids.push({ id: genId(), name: name, avatar: photo || av.dataset.avatar, points: 0, completedTasks: [] });
+  }
 
   const data = initData();
-  data.kids = [
-    { id: genId(), name: name1, avatar: avatar1, points: 0, completedTasks: [] },
-    { id: genId(), name: name2, avatar: avatar2, points: 0, completedTasks: [] }
-  ];
+  data.kids = kids;
   data.parentPin = pin;
   data.householdName = householdName;
   data.setupComplete = true;
@@ -1954,6 +1995,14 @@ function renderParentOverview() {
     html += '</div>';
   });
 
+  // Manage agents section
+  html += `<div style="margin-top:20px;text-align:center;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+    <button class="btn btn-green" style="padding:10px 20px;font-size:0.8rem" onclick="openAddKidModal()">+ Add Agent</button>
+    ${data.kids.length > 1 ? data.kids.map(k =>
+      `<button class="btn btn-pink" style="padding:10px 16px;font-size:0.7rem" onclick="removeKid('${k.id}')">Remove ${k.name}</button>`
+    ).join('') : ''}
+  </div>`;
+
   container.innerHTML = html;
 }
 
@@ -1967,7 +2016,7 @@ function renderParentTasks() {
 
   // Helper to render a single task crud item
   function renderTaskCrudItem(t) {
-    const assignLabel = t.assignedTo === 'both' ? 'Both kids' :
+    const assignLabel = t.assignedTo === 'both' ? 'Everyone' :
       t.assignedTo === 'shared' ? 'Rotating' :
       (data.kids.find(k => k.id === t.assignedTo)?.name || t.assignedTo);
 
@@ -2065,7 +2114,7 @@ function openTaskModal(taskId) {
   document.getElementById('task-modal-title').textContent = taskId ? 'Edit Mission' : 'New Mission';
 
   const sel = document.getElementById('task-edit-assigned');
-  sel.innerHTML = `<option value="both">Both Kids</option>
+  sel.innerHTML = `<option value="both">Everyone</option>
     ${data.kids.map(k => `<option value="${k.id}">${k.name}</option>`).join('')}`;
 
   if (taskId) {
@@ -2485,6 +2534,90 @@ function deductPoints() {
 
   saveData(data);
   closeModal('deduct-modal');
+  renderParentOverview();
+}
+
+// ============ MANAGE KIDS ============
+
+let addKidPhoto = null;
+
+function openAddKidModal() {
+  addKidPhoto = null;
+  document.getElementById('add-kid-name').value = '';
+  const preview = document.getElementById('add-kid-preview');
+  preview.classList.remove('show');
+  preview.removeAttribute('src');
+  const grid = document.getElementById('add-kid-avatars');
+  grid.innerHTML = AVATARS.map(a =>
+    `<div class="avatar-option" data-avatar="${a}" onclick="selectAddKidAvatar(this)">${a}</div>`
+  ).join('');
+  document.getElementById('add-kid-modal').classList.add('show');
+}
+
+function selectAddKidAvatar(el) {
+  document.querySelectorAll('#add-kid-avatars .avatar-option').forEach(a => a.classList.remove('selected'));
+  el.classList.add('selected');
+  addKidPhoto = null;
+  document.getElementById('add-kid-preview').classList.remove('show');
+}
+
+function handleAddKidPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128; canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      const s = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width-s)/2, (img.height-s)/2, s, s, 0, 0, 128, 128);
+      addKidPhoto = canvas.toDataURL('image/jpeg', 0.8);
+      const preview = document.getElementById('add-kid-preview');
+      preview.src = addKidPhoto;
+      preview.classList.add('show');
+      document.querySelectorAll('#add-kid-avatars .avatar-option').forEach(a => a.classList.remove('selected'));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function addNewKid() {
+  const name = document.getElementById('add-kid-name').value.trim();
+  const av = document.querySelector('#add-kid-avatars .selected');
+  if (!name) return alert('Please enter a name for the new agent.');
+  if (!addKidPhoto && !av) return alert('Please pick an avatar or upload a photo.');
+
+  const avatar = addKidPhoto || av.dataset.avatar;
+  const data = getData();
+  data.kids.push({ id: genId(), name: name, avatar: avatar, points: 0, completedTasks: [] });
+  saveData(data);
+  closeModal('add-kid-modal');
+  renderParentOverview();
+}
+
+function removeKid(kidId) {
+  const data = getData();
+  const kid = data.kids.find(k => k.id === kidId);
+  if (!kid) return;
+  if (data.kids.length <= 1) return alert('You need at least one agent.');
+  if (!confirm(`Remove ${kid.name}? This will delete all their points and history.`)) return;
+
+  data.kids = data.kids.filter(k => k.id !== kidId);
+  // Reassign tasks that were assigned to this kid
+  data.tasks.forEach(t => {
+    if (t.assignedTo === kidId) t.assignedTo = 'both';
+  });
+  // Clean up completions and redemptions referencing this kid
+  data.tasks.forEach(t => {
+    t.completions = t.completions.filter(c => c.kidId !== kidId);
+  });
+  if (data.redemptions) data.redemptions = data.redemptions.filter(r => r.kidId !== kidId);
+  if (data.bonusGrants) data.bonusGrants = data.bonusGrants.filter(b => b.kidId !== kidId);
+
+  saveData(data);
   renderParentOverview();
 }
 
