@@ -1932,9 +1932,18 @@ function renderParentOverview() {
         <button class="btn btn-pink" style="padding:8px 16px;font-size:0.7rem;min-width:0" onclick="openDeductModal('${kid.id}')">Remove Stars</button>
       </div>`;
 
-    // Daily tasks grid (Sun-Sat)
-    if (dailyTasks.length > 0) {
-      html += `<div style="margin-top:14px;font-weight:700;font-size:0.85rem;color:var(--text-muted)">Daily Missions</div>`;
+    // Daily tasks grid (Sun-Sat) — grouped by time of day
+    const timeGroups = [
+      { key: 'morning', label: '🌅 Morning Missions' },
+      { key: 'evening', label: '🌙 Evening Missions' },
+      { key: 'anytime', label: '⭐ Anytime Missions' }
+    ];
+
+    timeGroups.forEach(group => {
+      const groupTasks = dailyTasks.filter(t => (t.timeOfDay || 'anytime') === group.key);
+      if (groupTasks.length === 0) return;
+
+      html += `<div style="margin-top:14px;font-weight:700;font-size:0.85rem;color:var(--text-muted)">${group.label}</div>`;
       html += '<table class="weekly-grid"><thead><tr><th>Task</th>';
       weekDates.forEach((d, i) => {
         const isToday = d === today;
@@ -1942,12 +1951,11 @@ function renderParentOverview() {
       });
       html += '</tr></thead><tbody>';
 
-      dailyTasks.forEach(t => {
+      groupTasks.forEach(t => {
         const days = t.daysActive || 'everyday';
         const daysLabel = days === 'weekdays' ? ' <span class="pts-label">Mon–Fri</span>' : days === 'weekends' ? ' <span class="pts-label">Sat–Sun</span>' : '';
         html += `<tr><td>${t.title} <span class="pts-label">${t.points}pts</span>${daysLabel}</td>`;
         weekDates.forEach((d, i) => {
-          // Check if task is active on this day of week (i: 0=Sun..6=Sat)
           const isWkend = i === 0 || i === 6;
           const taskActive = days === 'everyday' || (days === 'weekdays' && !isWkend) || (days === 'weekends' && isWkend);
 
@@ -1972,6 +1980,31 @@ function renderParentOverview() {
           }
         });
         html += '</tr>';
+      });
+      html += '</tbody></table>';
+    });
+
+    // Extra tasks for this kid
+    const extraTasks = data.tasks.filter(t =>
+      (t.type === 'extra' || t.type === 'shared') && (t.assignedTo === 'both' || t.assignedTo === kid.id || t.assignedTo === 'shared')
+    );
+    if (extraTasks.length > 0) {
+      html += `<div style="margin-top:14px;font-weight:700;font-size:0.85rem;color:var(--text-muted)">🎯 Extra Missions</div>`;
+      html += '<table class="weekly-grid"><thead><tr><th>Task</th><th>Status</th></tr></thead><tbody>';
+      extraTasks.forEach(t => {
+        const completion = t.completions.find(c => c.kidId === kid.id && c.date === today);
+        const ct = kid.completedTasks.find(c => c.taskId === t.id && c.date === today);
+        let status;
+        if (completion) {
+          if (t.requiresApproval && ct && !ct.approved) {
+            status = '<span class="check-pending">⏳ Pending</span>';
+          } else {
+            status = '<span class="check-done">✓ Done</span>';
+          }
+        } else {
+          status = '<span class="check-miss">○ Available</span>';
+        }
+        html += `<tr><td>${t.title} <span class="pts-label">${t.points}pts</span></td><td>${status}</td></tr>`;
       });
       html += '</tbody></table>';
     }
