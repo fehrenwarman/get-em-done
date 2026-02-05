@@ -1054,7 +1054,7 @@ function getWeekDates(weekStartStr) {
   for (let i = 0; i < 7; i++) {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
-    dates.push(d.toISOString().split('T')[0]);
+    dates.push(d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'));
   }
   return dates;
 }
@@ -1935,7 +1935,7 @@ function renderParentDashboard() {
 function getViewWeekStart() {
   const d = new Date();
   d.setDate(d.getDate() - d.getDay() + (parentWeekOffset * 7));
-  return d.toISOString().split('T')[0];
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
 function renderParentOverview() {
