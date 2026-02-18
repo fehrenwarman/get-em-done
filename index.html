@@ -647,12 +647,14 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
     <button class="parent-tab" data-tab="tasks" onclick="showParentTab('tasks', this)">Missions</button>
     <button class="parent-tab" data-tab="rewards" onclick="showParentTab('rewards', this)">Rewards</button>
     <button class="parent-tab" data-tab="approvals" onclick="showParentTab('approvals', this)">Approvals</button>
+    <button class="parent-tab" data-tab="history" onclick="showParentTab('history', this)">History</button>
   </div>
 
   <div id="parent-overview" class="parent-section active"></div>
   <div id="parent-tasks" class="parent-section"></div>
   <div id="parent-rewards" class="parent-section"></div>
   <div id="parent-approvals" class="parent-section"></div>
+  <div id="parent-history" class="parent-section"></div>
 </div>
 
 <!-- PIN Modal -->
@@ -803,6 +805,19 @@ h1, h2, h3, .nav-tab, .parent-tab, .btn, .kid-card .name, .day-header .day-name,
   </div>
 </div>
 
+<!-- Uncheck Confirmation Modal -->
+<div class="modal-overlay" id="uncheck-modal">
+  <div class="modal" style="text-align:center">
+    <h2>Undo Task?</h2>
+    <p id="uncheck-task-name" style="font-weight:600;margin-bottom:16px"></p>
+    <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:20px">This will mark the task as incomplete and remove any points earned.</p>
+    <div class="btn-row" style="justify-content:center">
+      <button class="btn btn-gray" onclick="closeModal('uncheck-modal')">Cancel</button>
+      <button class="btn btn-pink" onclick="confirmUncompleteTask()">Undo Task</button>
+    </div>
+  </div>
+</div>
+
 <!-- Confetti Container -->
 <div class="confetti-container" id="confetti-container"></div>
 
@@ -895,15 +910,18 @@ function getData() {
   return appDataCache;
 }
 
-let lastSaveTime = 0; // guard against realtime overwriting local saves
+let lastSaveId = null; // guard against realtime overwriting local saves
 
 function saveData(data) {
+  // Generate unique save ID to detect our own echoes
+  lastSaveId = genId();
+  data._saveId = lastSaveId;
+
   appDataCache = JSON.parse(JSON.stringify(data)); // deep clone to cache
   // Always keep a localStorage backup
   try { localStorage.setItem('kidsTaskRewards_backup', JSON.stringify(data)); } catch (e) {}
   // Write to Supabase
   if (familyCode) {
-    lastSaveTime = Date.now();
     sb.from('families')
       .update({ data: data, family_name: data.householdName || '', base_name: 'Basecamp', parent_pin: data.parentPin || '' })
       .eq('id', familyCode)
@@ -942,12 +960,12 @@ function startRealtimeSync() {
     .on('postgres_changes',
       { event: 'UPDATE', schema: 'public', table: 'families', filter: 'id=eq.' + familyCode },
       (payload) => {
-        // Ignore realtime echoes within 3s of our own save to prevent race condition
-        if (Date.now() - lastSaveTime < 3000) {
+        const remoteData = payload.new.data;
+        // Ignore realtime echoes of our own save by comparing save IDs
+        if (remoteData._saveId && remoteData._saveId === lastSaveId) {
           updateConnectionBanner(true);
           return;
         }
-        const remoteData = payload.new.data;
         const remoteJSON = JSON.stringify(remoteData);
         const cacheJSON = JSON.stringify(appDataCache);
         if (remoteJSON !== cacheJSON) {
@@ -1042,7 +1060,16 @@ function genId() { return Date.now().toString(36) + Math.random().toString(36).s
 function getToday() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 
 function getWeekStart(dateObj) {
-  const d = dateObj ? new Date(dateObj) : new Date();
+  // Handle string dates by appending T12:00:00 to force local time interpretation
+  // (prevents UTC midnight parsing which can shift dates by a day)
+  let d;
+  if (!dateObj) {
+    d = new Date();
+  } else if (typeof dateObj === 'string') {
+    d = new Date(dateObj + 'T12:00:00');
+  } else {
+    d = new Date(dateObj);
+  }
   d.setDate(d.getDate() - d.getDay());
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
@@ -1429,7 +1456,7 @@ function renderKidHome() {
       const check = done ? (pendingApproval ? '⏳' : '✓') : '';
       const meta = pendingApproval ? 'Awaiting HQ confirmation' : (done ? 'Mission accomplished!' : '');
 
-      const action = done ? (pendingApproval ? '' : `uncompleteTask('${t.id}')`) : `completeTask('${t.id}')`;
+      const action = done ? (pendingApproval ? '' : `showUncheckModal('${t.id}')`) : `completeTask('${t.id}')`;
       return `<div class="${cls}" onclick="${action}">
         <div class="task-check">${check}</div>
         <div class="task-info">
@@ -1534,7 +1561,7 @@ function renderWeeklyTaskItem(t, kid, weekStart) {
   const check = done ? (pendingApproval ? '⏳' : '✓') : '';
   const meta = pendingApproval ? 'Awaiting HQ confirmation' : (done ? 'Mission accomplished!' : 'This week');
 
-  const action = done ? (pendingApproval ? '' : `uncompleteTask('${t.id}')`) : `completeTask('${t.id}')`;
+  const action = done ? (pendingApproval ? '' : `showUncheckModal('${t.id}')`) : `completeTask('${t.id}')`;
   return `<div class="${cls}" onclick="${action}">
     <div class="task-check">${check}</div>
     <div class="task-info"><div class="task-title">${t.title}</div><div class="task-meta">${meta}</div></div>
@@ -1557,7 +1584,7 @@ function renderExtraTaskItem(t, kid, weekStart) {
       const cls = pendingApproval ? 'task-item pending-approval' : 'task-item completed';
       const check = pendingApproval ? '⏳' : '✓';
       const meta = pendingApproval ? 'Team — awaiting HQ confirmation' : 'Team mission accomplished!';
-      const action = pendingApproval ? '' : `uncompleteTask('${t.id}')`;
+      const action = pendingApproval ? '' : `showUncheckModal('${t.id}')`;
       return `<div class="${cls}" onclick="${action}">
         <div class="task-check">${check}</div>
         <div class="task-info"><div class="task-title">🤝 ${t.title}</div><div class="task-meta">${meta}</div></div>
@@ -1577,7 +1604,7 @@ function renderExtraTaskItem(t, kid, weekStart) {
       const cls = pendingApproval ? 'task-item pending-approval' : 'task-item completed';
       const check = pendingApproval ? '⏳' : '✓';
       const meta = pendingApproval ? 'Awaiting HQ confirmation' : 'Mission accomplished!';
-      const action = pendingApproval ? '' : `uncompleteTask('${t.id}')`;
+      const action = pendingApproval ? '' : `showUncheckModal('${t.id}')`;
       return `<div class="${cls}" onclick="${action}">
         <div class="task-check">${check}</div>
         <div class="task-info"><div class="task-title">${t.title}</div><div class="task-meta">${meta}</div></div>
@@ -1620,7 +1647,7 @@ function renderExtraTaskItem(t, kid, weekStart) {
     const cls = pendingApproval ? 'task-item pending-approval' : 'task-item completed';
     const check = pendingApproval ? '⏳' : '✓';
     const meta = pendingApproval ? 'Awaiting HQ confirmation' : 'Mission accomplished!';
-    const action = pendingApproval ? '' : `uncompleteTask('${t.id}')`;
+    const action = pendingApproval ? '' : `showUncheckModal('${t.id}')`;
     return `<div class="${cls}" onclick="${action}">
       <div class="task-check">${check}</div>
       <div class="task-info"><div class="task-title">${t.title}</div><div class="task-meta">${meta}</div></div>
@@ -1661,6 +1688,25 @@ function renderSharedTaskItem(t, kid) {
 }
 
 // ============ TASK ACTIONS ============
+
+let pendingUncheckTaskId = null;
+
+function showUncheckModal(taskId) {
+  const data = getData();
+  const task = data.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  pendingUncheckTaskId = taskId;
+  document.getElementById('uncheck-task-name').textContent = task.title;
+  document.getElementById('uncheck-modal').classList.add('show');
+}
+
+function confirmUncompleteTask() {
+  if (pendingUncheckTaskId) {
+    uncompleteTask(pendingUncheckTaskId);
+    pendingUncheckTaskId = null;
+  }
+  closeModal('uncheck-modal');
+}
 
 function claimTask(taskId) {
   const data = getData();
@@ -1915,6 +1961,7 @@ function showParentTab(tab, btnEl) {
   else if (tab === 'tasks') renderParentTasks();
   else if (tab === 'rewards') renderParentRewards();
   else if (tab === 'approvals') renderParentApprovals();
+  else if (tab === 'history') renderParentHistory();
 }
 
 function renderParentDashboard() {
@@ -2587,6 +2634,44 @@ function rejectTask(kidId, taskId, date) {
 
   saveData(data);
   renderParentApprovals();
+}
+
+// ============ PARENT HISTORY ============
+
+function renderParentHistory() {
+  const data = getData();
+  const container = document.getElementById('parent-history');
+  const redemptions = data.redemptions || [];
+
+  if (redemptions.length === 0) {
+    container.innerHTML = '<div class="empty-state"><span class="emoji">🎁</span>No rewards redeemed yet!</div>';
+    return;
+  }
+
+  // Sort by date descending (most recent first)
+  const sorted = [...redemptions].sort((a, b) => b.date.localeCompare(a.date));
+
+  let html = '<div class="crud-list">';
+  html += sorted.map(r => {
+    const kid = data.kids.find(k => k.id === r.kidId);
+    const reward = data.rewards.find(rw => rw.id === r.rewardId);
+    const kidName = kid ? kid.name : 'Unknown';
+    const kidAvatar = kid ? renderAvatar(kid.avatar, 'small') : '';
+    const rewardTitle = reward ? reward.title : 'Deleted reward';
+    const rewardEmoji = reward ? reward.emoji : '🎁';
+    const cost = reward ? reward.cost : '?';
+
+    return `<div class="crud-item">
+      <div style="font-size:1.8rem;margin-right:4px">${rewardEmoji}</div>
+      <div class="info">
+        <div class="label">${rewardTitle}</div>
+        <div class="meta">${kidAvatar} ${kidName} · ${r.date} · ${cost} pts</div>
+      </div>
+    </div>`;
+  }).join('');
+  html += '</div>';
+
+  container.innerHTML = html;
 }
 
 // ============ BONUS POINTS ============
